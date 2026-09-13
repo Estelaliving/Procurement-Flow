@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Estela Living — Procurement &amp; Release Control</title>
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <h1>Procurement &amp; Release Control</h1>
+  <div class="sync-status">
+    <span id="syncDot" class="dot dot-pending"></span>
+    <span id="syncLabel">Loading…</span>
+    <button id="refreshBtn" type="button">Refresh now</button>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="tab-btn active" data-view="queue" type="button">Release Queue</button>
+  <button class="tab-btn" data-view="recon" type="button">Budget vs WO Reconciliation</button>
+  <button class="tab-btn" data-view="house" type="button">House Lookup</button>
+</nav>
+
+<div class="filters" id="globalFilters">
+  <label>Company
+    <select id="fCompany"><option value="">All</option></select>
+  </label>
+  <label>Development
+    <select id="fDevelopment"><option value="">All</option></select>
+  </label>
+  <label>Model
+    <select id="fModel"><option value="">All</option></select>
+  </label>
+</div>
+
+<main>
+
+  <section id="viewQueue" class="view">
+    <div class="stage-filter" id="stageFilter">
+      <button class="stage-btn active" data-stage="ALL" type="button">All Stages</button>
+      <button class="stage-btn" data-stage="F" type="button">F — Permit Submitted</button>
+      <button class="stage-btn" data-stage="L" type="button">L — Pre Dry-In</button>
+      <button class="stage-btn" data-stage="O" type="button">O — Pre Drywall</button>
+      <button class="stage-btn" data-stage="Q" type="button">Q — Buyer Assigned</button>
+    </div>
+    <label class="show-released-toggle">
+      <input type="checkbox" id="showReleased"> Show already-released stages
+    </label>
+    <div id="queueBody">Loading…</div>
+  </section>
+
+  <section id="viewRecon" class="view" style="display:none">
+    <div class="stage-filter" id="reconStatusFilter">
+      <button class="stage-btn active" data-status="ALL" type="button">All</button>
+      <button class="stage-btn" data-status="FLAGGED" type="button">Flagged</button>
+      <button class="stage-btn" data-status="CAUTION" type="button">Caution</button>
+      <button class="stage-btn" data-status="DUPLICATE" type="button">Duplicate WO</button>
+      <button class="stage-btn" data-status="OK" type="button">OK</button>
+    </div>
+    <label class="show-released-toggle">
+      <input type="checkbox" id="showReviewed"> Show reviewed/dismissed lines
+    </label>
+    <div id="reconBody">Loading…</div>
+  </section>
+
+  <section id="viewHouse" class="view" style="display:none">
+    <input id="houseSearch" type="text" placeholder="Search house number or address…">
+    <div id="houseBody"></div>
+  </section>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
