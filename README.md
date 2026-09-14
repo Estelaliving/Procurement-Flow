@@ -49,13 +49,15 @@ reviewed) — stored in one small Supabase table, `procurement_flow_state`.
 - **Address is the join key** between the permit tracker and the other 3 systems (there's no
   shared house number). Normalized as "text before the first comma, uppercased." Any address
   formatting drift between the two systems will cause a house to silently not show permit info.
-- **Stage F rule**: `permitStatus` is anything other than `presubmit` (i.e. `applied`,
-  `issued`, or `co`). "Days since submitted" is shown for prioritization.
-- **"Already released" is tracked entirely by us** (the Mark released checkbox), not inferred
-  from `houserelease.wostage`/`release_date` — those fields' meaning wasn't clearly a reliable
-  "has this stage already been released" signal from the sample data, so first load will show
-  a large backlog of "due now" items across every house's history until each is checked off.
-  Worth a bulk pass together the first time this goes live.
+- **Stage F rule**: `permitStatus === "applied"` only (actively under city review). `presubmit`
+  means not submitted yet; `issued`/`co` means the city review window has already passed —
+  either way it's excluded from the F queue.
+- **A house only ever has one actionable stage at a time.** `houserelease.wostage` is the
+  source system's own "what stage is this house currently at" marker and is authoritative: any
+  stage at or before `wostage` is already passed, full stop, regardless of whether it was ever
+  checked off in this tool. Stages after `wostage` are then evaluated normally (due/not yet), but
+  still gated sequentially by our own "Mark released" — L can't show due until F is marked
+  released, O until L, Q until O — since `wostage` may lag behind same-day activity.
 - **Reconciliation tolerance**: ≤$200 diff = OK, $200–300 = Caution, >$300 = Flagged (applied to
   `|WO total − budget|` per cost code); more than one WO per house+cost-code = Duplicate.
 - Saw a `stagecode` value of `"I"` in the work orders data (outside F/L/O/Q) — displayed as-is,
