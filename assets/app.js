@@ -131,9 +131,11 @@
     var today = todayLocal();
     if (stage === "F") {
       if (!house.permit) return { state: "unknown" };
-      var underReview = house.permitStatus && house.permitStatus !== "presubmit";
+      // Only "applied" (submitted, actively under city review) belongs in the queue.
+      // "issued"/"co" means the city has moved past review — already handled, drop it.
+      if (house.permitStatus === "issued" || house.permitStatus === "co") return { state: "unknown" };
       var days = house.submittedDate ? daysBetween(today, house.submittedDate) : null;
-      return underReview
+      return house.permitStatus === "applied"
         ? { state: "due", days: days }
         : { state: "notyet", note: "Not yet submitted (" + (house.permitStatus || "no status") + ")" };
     }
@@ -203,6 +205,16 @@
     return rows;
   }
 
+  function attachHouseInfo(recon, houseList) {
+    var byKey = {};
+    houseList.forEach(function (h) { byKey[h.key] = h; });
+    recon.forEach(function (r) {
+      var h = byKey[houseKey(r.companycode, r.housenumber)];
+      r.address = h ? h.address : null;
+      r.modelcode = h ? h.modelcode : null;
+    });
+  }
+
   // ---- Data refresh cycle ------------------------------------------------------------
   function setSyncStatus(state, label) {
     var dot = document.getElementById("syncDot");
@@ -217,6 +229,7 @@
         var releaseRows = results[0], budgetRows = results[1], woRows = results[2], permits = results[3];
         houses = buildHouses(releaseRows, budgetRows, permits);
         reconRows = buildRecon(budgetRows, woRows);
+        attachHouseInfo(reconRows, houses);
         populateFilters();
         renderActiveView();
         setSyncStatus("ok", "Live — last synced " + new Date().toLocaleTimeString());
@@ -329,17 +342,38 @@
   // ---- Render: Reconciliation ------------------------------------------------------------
   function renderRecon() {
     var showReviewed = document.getElementById("showReviewed").checked;
+    var q = (document.getElementById("reconHouseSearch").value || "").trim().toUpperCase();
     var rows = reconRows.filter(function (r) {
-      if (!matchesFilters(r.companycode, r.developmentcode, null)) return false;
+      if (!matchesFilters(r.companycode, r.developmentcode, r.modelcode)) return false;
       if (activeReconStatus !== "ALL" && r.status !== activeReconStatus) return false;
       var reviewed = localState.reconReviewed[r.key];
       if (reviewed && !showReviewed) return false;
+      if (q && r.housenumber.indexOf(q) < 0 && (r.address || "").toUpperCase().indexOf(q) < 0) return false;
       return true;
     });
     if (rows.length === 0) { document.getElementById("reconBody").innerHTML = "<p class='small-muted'>No lines match.</p>"; return; }
 
-    var html = '<table><thead><tr><th>House</th><th>Cost Code</th><th>Description</th><th>Budget</th><th>Actual</th><th>WO Total</th><th>WO Count</th><th>Diff</th><th>Status</th><th></th></tr></thead><tbody>' +
-      rows.map(renderReconRow).join("") + "</tbody></table>";
+    var byHouse = {};
+    rows.forEach(function (r) {
+      var hk = houseKey(r.companycode, r.housenumber);
+      (byHouse[hk] = byHouse[hk] || []).push(r);
+    });
+    var houseKeys = Object.keys(byHouse).sort();
+
+    var html = houseKeys.map(function (hk) {
+      var lines = byHouse[hk].sort(function (a, b) {
+        var order = { DUPLICATE: 0, FLAGGED: 1, CAUTION: 2, OK: 3 };
+        return (order[a.status] - order[b.status]) || a.catcc.localeCompare(b.catcc);
+      });
+      var dupCount = lines.filter(function (l) { return l.status === "DUPLICATE"; }).length;
+      var first = lines[0];
+      var header = first.companycode + "/" + first.developmentcode + "/" + first.housenumber +
+        (first.address ? " — " + first.address : "") +
+        (dupCount ? ' <span class="badge badge-dup">' + dupCount + " duplicate cost code(s)</span>" : "");
+      return '<div class="group-header">' + header + "</div>" +
+        '<table><thead><tr><th>Cost Code</th><th>Description</th><th>Budget</th><th>Actual</th><th>WO Total</th><th>WO Count</th><th>Diff</th><th>Status</th><th></th></tr></thead><tbody>' +
+        lines.map(renderReconRow).join("") + "</tbody></table>";
+    }).join("");
     document.getElementById("reconBody").innerHTML = html;
 
     document.querySelectorAll("[data-review]").forEach(function (btn) {
@@ -365,8 +399,7 @@
     var diffClass = r.diff > 0 ? "diff-pos" : r.diff < 0 ? "diff-neg" : "";
     var reviewed = localState.reconReviewed[r.key];
     var woList = r.wos.map(function (w) { return w.workordernumber + " (" + w.vendorname + ", " + fmtMoney(num(w.amount)) + ", " + w.wodate + (w.stagecode ? ", stage " + w.stagecode : "") + ")"; }).join("<br>");
-    return "<tr><td>" + r.companycode + "/" + r.developmentcode + "/" + r.housenumber + "</td>" +
-      "<td>" + r.catcc + "</td>" +
+    return "<tr><td>" + r.catcc + "</td>" +
       "<td>" + r.desccat + (r.desccost ? " — " + r.desccost : "") + "</td>" +
       "<td>" + fmtMoney(r.budgetAmt) + "</td>" +
       "<td>" + fmtMoney(r.actualAmt) + "</td>" +
@@ -441,6 +474,7 @@
     });
     document.getElementById("showReleased").addEventListener("change", renderQueue);
     document.getElementById("showReviewed").addEventListener("change", renderRecon);
+    document.getElementById("reconHouseSearch").addEventListener("input", renderRecon);
     document.getElementById("houseSearch").addEventListener("input", renderHouseSearch);
     document.getElementById("refreshBtn").addEventListener("click", refresh);
   }
