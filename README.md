@@ -4,14 +4,18 @@ Live dashboard for Estela Living's procurement/release process. Static site, no 
 every page load (and every 45s after) fetches the 4 source systems directly from the browser,
 joins them, and computes:
 
-1. **Release Queue** — per house, whether Stage F / L / O / Q is due, not yet due, or already
-   marked released.
+1. **Release Queue** — per house, whether Stage F / L / O / Q is due, not yet due, or blocked
+   behind an earlier stage. This is a pure mirror of the source APIs: a house's current stage
+   comes 100% from `houserelease.wostage`, `permitStatus`, and the schedule dates, recomputed
+   every refresh. Nothing clicked in this tool ever changes what stage a house is considered to
+   be at — that only changes when the real systems change.
 2. **Budget vs WO Reconciliation** — every cost code with at least one released work order,
    compared line-by-line against the budget, flagging duplicates and amount mismatches.
 
-Nothing is ever written back to the 4 source systems. The only thing this app writes anywhere
-is its own state (which stages you've marked released, which reconciliation lines you've
-reviewed) — stored in one small Supabase table, `procurement_flow_state`.
+Nothing is ever written back to the 4 source systems. The only things this app writes anywhere
+are purely informational bookkeeping — a personal "I released this" note (has zero effect on
+anything computed) and which reconciliation lines you've reviewed — stored in one small Supabase
+table, `procurement_flow_state`.
 
 ## Sources (read-only)
 
@@ -37,7 +41,8 @@ reviewed) — stored in one small Supabase table, `procurement_flow_state`.
    create policy "public update" on procurement_flow_state for update using (true);
    ```
 
-   Until this exists, the app still works, but "Mark released" / "Mark reviewed" won't
+   Until this exists, the app still works fully — release status is always computed live from
+   the APIs regardless — but the "I released this" notes and "Mark reviewed" checkmarks won't
    survive a page reload.
 
 2. Create an empty GitHub repo (e.g. `estelaliving/procurement-flow`), push this folder to it,
@@ -52,12 +57,13 @@ reviewed) — stored in one small Supabase table, `procurement_flow_state`.
 - **Stage F rule**: `permitStatus === "applied"` only (actively under city review). `presubmit`
   means not submitted yet; `issued`/`co` means the city review window has already passed —
   either way it's excluded from the F queue.
-- **A house only ever has one actionable stage at a time.** `houserelease.wostage` is the
-  source system's own "what stage is this house currently at" marker and is authoritative: any
-  stage at or before `wostage` is already passed, full stop, regardless of whether it was ever
-  checked off in this tool. Stages after `wostage` are then evaluated normally (due/not yet), but
-  still gated sequentially by our own "Mark released" — L can't show due until F is marked
-  released, O until L, Q until O — since `wostage` may lag behind same-day activity.
+- **A house only ever has one actionable stage at a time, derived purely from the API.**
+  `houserelease.wostage` is the source system's own "what stage is this house currently at"
+  marker and is the sole source of truth: any stage at or before `wostage` is already passed.
+  The next stage after `wostage` is evaluated against its real condition (permit status /
+  schedule date); everything further out is blocked behind it. This tool has no memory of its
+  own that affects any of this — nothing you click here can advance a house. If `wostage` hasn't
+  caught up to reality yet, this queue won't either, by design.
 - **Reconciliation tolerance**: ≤$200 diff = OK, $200–300 = Caution, >$300 = Flagged (applied to
   `|WO total − budget|` per cost code); more than one WO per house+cost-code = Duplicate.
 - Saw a `stagecode` value of `"I"` in the work orders data (outside F/L/O/Q) — displayed as-is,
