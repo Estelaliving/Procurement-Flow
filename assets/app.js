@@ -335,9 +335,14 @@
     document.querySelectorAll("[data-mark-release]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var relKey = btn.getAttribute("data-mark-release");
+        var parts = relKey.split("|"); // companycode, housenumber, stage
+        var stage = parts[2], housenumber = parts[1];
+        var h = houses.filter(function (hh) { return hh.key === parts[0] + "|" + housenumber; })[0];
+        var label = housenumber + (h && h.address ? " — " + h.address : "");
+        if (!confirm("Mark Stage " + stage + " released for " + label + "?\n\nYou'll be taken straight to its work orders to review.")) return;
         localState.releases[relKey] = { released_at: new Date().toISOString(), by: "manual" };
         saveState();
-        renderQueue();
+        goToReconFor(housenumber, stage, { relKey: relKey, label: label });
       });
     });
     document.querySelectorAll("[data-unmark-release]").forEach(function (btn) {
@@ -356,12 +361,13 @@
     });
   }
 
-  function goToReconFor(housenumber, stage) {
+  function goToReconFor(housenumber, stage, releaseCtx) {
     activeView = "recon";
     document.querySelectorAll(".tab-btn").forEach(function (b) { b.classList.toggle("active", b.getAttribute("data-view") === "recon"); });
     ["Queue", "Recon", "House"].forEach(function (v) {
       document.getElementById("view" + v).style.display = (v === "Recon") ? "" : "none";
     });
+    renderReconBanner(releaseCtx || null);
     document.getElementById("reconHouseSearch").value = housenumber;
     activeReconStage = stage;
     document.querySelectorAll("#reconStageFilter .stage-btn").forEach(function (b) {
@@ -372,6 +378,24 @@
       b.classList.toggle("active", b.getAttribute("data-status") === "ALL");
     });
     renderRecon();
+  }
+
+  function renderReconBanner(releaseCtx) {
+    var el = document.getElementById("reconBanner");
+    if (!releaseCtx) { el.innerHTML = ""; return; }
+    el.innerHTML = '<div class="banner"><span>Marked released: ' + releaseCtx.label +
+      ' — review its work orders below before moving on.</span>' +
+      '<span><button data-banner-undo="' + releaseCtx.relKey + '">Undo release</button> ' +
+      '<button class="dismiss" data-banner-dismiss>Dismiss</button></span></div>';
+    document.querySelector("[data-banner-undo]").addEventListener("click", function () {
+      delete localState.releases[releaseCtx.relKey];
+      saveState();
+      renderReconBanner(null);
+      renderRecon();
+    });
+    document.querySelector("[data-banner-dismiss]").addEventListener("click", function () {
+      renderReconBanner(null);
+    });
   }
 
   function renderQueueRow(item) {
@@ -511,6 +535,7 @@
         ["Queue", "Recon", "House"].forEach(function (v) {
           document.getElementById("view" + v).style.display = (v.toLowerCase() === activeView) ? "" : "none";
         });
+        renderReconBanner(null);
         renderActiveView();
       });
     });
