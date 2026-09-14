@@ -111,6 +111,7 @@
         elevationcode: h.elevationcode,
         address: h.address1,
         buyername: h.buyername,
+        wostage: (h.wostage || "").trim().toUpperCase(),
         dryinghome: parseDate(h.dryinghome),
         drywall: parseDate(h.drywall),
         cabinets: parseDate(h.cabinets),
@@ -162,16 +163,23 @@
   var STAGE_ORDER = ["F", "L", "O", "Q"];
 
   // A house should only ever have ONE actionable stage at a time: L can't be
-  // due until F is actually released, O until L, Q until O. Each stage's own
-  // condition (permit status / schedule date) is still evaluated independently
-  // above, but here we gate it behind the prior stage actually being released
-  // (or not applicable at all, e.g. F once the permit is past our review
-  // window) -- otherwise a house that's behind on F would also show L/O/Q as
-  // "due" just because their dates happened to pass too.
+  // due until F is actually released, O until L, Q until O. `wostage` on the
+  // house-release record is the source system's own "what stage is this
+  // house currently at" marker -- it's authoritative and takes priority over
+  // our own manual "Mark released" tracking (which only exists because
+  // wostage alone doesn't capture same-day/edge-case timing). Any stage at
+  // or before wostage is already passed in reality, full stop, regardless of
+  // whether we ever clicked "Mark released" for it ourselves.
   function gatedStatuses(house) {
     var result = {};
+    var wostageIdx = STAGE_ORDER.indexOf(house.wostage);
     var cleared = true;
     STAGE_ORDER.forEach(function (stage, i) {
+      if (wostageIdx >= 0 && i <= wostageIdx) {
+        result[stage] = { state: "unknown", note: "Already past stage " + house.wostage + " per house-release record" };
+        cleared = true;
+        return;
+      }
       var effective = cleared
         ? stageStatus(house, stage)
         : { state: "blocked", waitingOn: STAGE_ORDER[i - 1] };
@@ -475,7 +483,7 @@
       var gated = gatedStatuses(h);
       var stagesHtml = STAGE_ORDER.map(function (s) {
         var st = gated[s];
-        var detail = st.date ? " (" + fmtDate(st.date) + ")" : st.waitingOn ? " (waiting on " + st.waitingOn + ")" : "";
+        var detail = st.date ? " (" + fmtDate(st.date) + ")" : st.waitingOn ? " (waiting on " + st.waitingOn + ")" : st.note ? " (" + st.note + ")" : "";
         return "<div><b>" + s + "</b>: " + st.state + detail + "</div>";
       }).join("");
       return '<div class="house-card"><h3>' + h.housenumber + " — " + (h.address || "") + '</h3>' +
