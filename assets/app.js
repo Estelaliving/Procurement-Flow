@@ -34,6 +34,7 @@
   var activeView = "queue";
   var activeStage = "ALL";
   var activeReconStatus = "ALL";
+  var activeReconStage = "ALL";
 
   function getSb() {
     if (!sb && window.supabase) sb = window.supabase.createClient(SB_URL, SB_KEY);
@@ -317,19 +318,44 @@
         renderQueue();
       });
     });
+    document.querySelectorAll("[data-review-wos]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var parts = btn.getAttribute("data-review-wos").split("|");
+        goToReconFor(parts[0], parts[1]);
+      });
+    });
+  }
+
+  function goToReconFor(housenumber, stage) {
+    activeView = "recon";
+    document.querySelectorAll(".tab-btn").forEach(function (b) { b.classList.toggle("active", b.getAttribute("data-view") === "recon"); });
+    ["Queue", "Recon", "House"].forEach(function (v) {
+      document.getElementById("view" + v).style.display = (v === "Recon") ? "" : "none";
+    });
+    document.getElementById("reconHouseSearch").value = housenumber;
+    activeReconStage = stage;
+    document.querySelectorAll("#reconStageFilter .stage-btn").forEach(function (b) {
+      b.classList.toggle("active", b.getAttribute("data-recon-stage") === stage);
+    });
+    activeReconStatus = "ALL";
+    document.querySelectorAll("#reconStatusFilter .stage-btn").forEach(function (b) {
+      b.classList.toggle("active", b.getAttribute("data-status") === "ALL");
+    });
+    renderRecon();
   }
 
   function renderQueueRow(item) {
     var h = item.house, stage = item.stage, st = item.st;
     var relKey = h.key + "|" + stage;
     var badge, extra = "";
+    var reviewBtn = '<button class="mark-btn" data-review-wos="' + h.housenumber + "|" + stage + '">Review released WOs</button>';
     if (st.state === "released") {
       badge = '<span class="badge badge-released">Released ' + st.info.released_at.slice(0, 10) + "</span>";
-      extra = '<button class="mark-btn" data-unmark-release="' + relKey + '">Undo</button>';
+      extra = '<button class="mark-btn" data-unmark-release="' + relKey + '">Undo</button> ' + reviewBtn;
     } else if (st.state === "due") {
       badge = '<span class="badge badge-due">Due now</span>';
       if (st.days != null) extra = '<span class="days-badge">' + (st.days >= 0 ? st.days + "d since submitted" : "") + "</span>";
-      extra += '<button class="mark-btn" data-mark-release="' + relKey + '">Mark released</button>';
+      extra += '<button class="mark-btn" data-mark-release="' + relKey + '">Mark released</button> ' + reviewBtn;
     } else {
       var when = st.date ? fmtDate(st.date) : (st.note || "not yet due");
       badge = '<span class="badge badge-notyet">' + when + "</span>";
@@ -346,6 +372,7 @@
     var rows = reconRows.filter(function (r) {
       if (!matchesFilters(r.companycode, r.developmentcode, r.modelcode)) return false;
       if (activeReconStatus !== "ALL" && r.status !== activeReconStatus) return false;
+      if (activeReconStage !== "ALL" && !r.wos.some(function (w) { return w.stagecode === activeReconStage; })) return false;
       var reviewed = localState.reconReviewed[r.key];
       if (reviewed && !showReviewed) return false;
       if (q && r.housenumber.indexOf(q) < 0 && (r.address || "").toUpperCase().indexOf(q) < 0) return false;
@@ -466,6 +493,14 @@
         document.querySelectorAll("#reconStatusFilter .stage-btn").forEach(function (b) { b.classList.remove("active"); });
         btn.classList.add("active");
         activeReconStatus = btn.getAttribute("data-status");
+        renderRecon();
+      });
+    });
+    document.querySelectorAll("#reconStageFilter .stage-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        document.querySelectorAll("#reconStageFilter .stage-btn").forEach(function (b) { b.classList.remove("active"); });
+        btn.classList.add("active");
+        activeReconStage = btn.getAttribute("data-recon-stage");
         renderRecon();
       });
     });
