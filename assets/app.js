@@ -1,8 +1,13 @@
 /* Estela Living — Procurement & Release Control
    Static, client-side only: fetches the 4 source systems directly in-browser
-   on an interval, joins them, computes release-readiness + reconciliation,
-   and persists only OUR OWN state (release checkmarks, reviewed lines) to
-   Supabase — never writes back to any source system. */
+   on an interval, joins them, and computes release-readiness + reconciliation.
+   This is purely a read-only mirror of those systems -- every house's stage
+   comes 100% from the APIs (wostage, permit status, schedule dates), never
+   from anything clicked in this tool. The only thing ever written anywhere
+   is our own optional bookkeeping (a personal "I released this" note, and
+   which reconciliation lines have been reviewed) in one small Supabase
+   table -- purely informational, with zero effect on what's shown as a
+   house's current stage. Never writes back to any of the 4 source systems. */
 
 (function () {
   "use strict";
@@ -126,10 +131,6 @@
   }
 
   function stageStatus(house, stage) {
-    var relKey = house.key + "|" + stage;
-    var released = localState.releases[relKey];
-    if (released) return { state: "released", info: released };
-
     var today = todayLocal();
     if (stage === "F") {
       if (!house.permit) return { state: "unknown" };
@@ -162,14 +163,14 @@
 
   var STAGE_ORDER = ["F", "L", "O", "Q"];
 
-  // A house should only ever have ONE actionable stage at a time: L can't be
-  // due until F is actually released, O until L, Q until O. `wostage` on the
-  // house-release record is the source system's own "what stage is this
-  // house currently at" marker -- it's authoritative and takes priority over
-  // our own manual "Mark released" tracking (which only exists because
-  // wostage alone doesn't capture same-day/edge-case timing). Any stage at
-  // or before wostage is already passed in reality, full stop, regardless of
-  // whether we ever clicked "Mark released" for it ourselves.
+  // A house's stage lives ONLY in the source systems -- `wostage` on the
+  // house-release record is authoritative for "what stage is this house
+  // currently at." Nothing this tool does (clicking anything) can move a
+  // house forward; it only ever reflects what the APIs say, every refresh.
+  // Any stage at or before wostage is already passed. The next stage after
+  // that is evaluated against its real condition (permit status / schedule
+  // date); anything further out is blocked behind it, since a house can
+  // only be at one stage at a time in reality.
   function gatedStatuses(house) {
     var result = {};
     var wostageIdx = STAGE_ORDER.indexOf(house.wostage);
@@ -184,7 +185,7 @@
         ? stageStatus(house, stage)
         : { state: "blocked", waitingOn: STAGE_ORDER[i - 1] };
       result[stage] = effective;
-      cleared = (effective.state === "released" || effective.state === "unknown");
+      cleared = (effective.state === "unknown");
     });
     return result;
   }
@@ -302,8 +303,13 @@
   }
 
   // ---- Render: Release Queue ------------------------------------------------------------
+  // Everything shown here comes straight from gatedStatuses(), which is 100%
+  // API-derived (wostage + permit status + schedule dates). The only thing
+  // this tool ever writes is an optional personal note ("I released this on
+  // X") -- it is purely informational, never hides a row, never changes
+  // what stage a house is considered to be at. That only ever changes when
+  // the source APIs themselves change.
   function renderQueue() {
-    var showReleased = document.getElementById("showReleased").checked;
     var stages = activeStage === "ALL" ? ["F", "L", "O", "Q"] : [activeStage];
     var byDev = {};
 
@@ -313,7 +319,6 @@
       stages.forEach(function (stage) {
         var st = gated[stage];
         if (st.state === "unknown") return;
-        if (st.state === "released" && !showReleased) return;
         var devKey = h.companycode + " / " + h.developmentcode;
         (byDev[devKey] = byDev[devKey] || []).push({ house: h, stage: stage, st: st });
       });
@@ -324,7 +329,7 @@
 
     var html = groups.map(function (g) {
       var items = byDev[g].sort(function (a, b) {
-        var order = { due: 0, notyet: 1, blocked: 2, released: 3 };
+        var order = { due: 0, notyet: 1, blocked: 2 };
         return (order[a.st.state] - order[b.st.state]) || a.house.housenumber.localeCompare(b.house.housenumber);
       });
       return '<div class="group-header">' + g + " — " + items.length + " item(s)</div>" +
@@ -332,23 +337,11 @@
     }).join("");
     document.getElementById("queueBody").innerHTML = html;
 
-    document.querySelectorAll("[data-mark-release]").forEach(function (btn) {
+    document.querySelectorAll("[data-toggle-note]").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        var relKey = btn.getAttribute("data-mark-release");
-        var parts = relKey.split("|"); // companycode, housenumber, stage
-        var stage = parts[2], housenumber = parts[1];
-        var h = houses.filter(function (hh) { return hh.key === parts[0] + "|" + housenumber; })[0];
-        var label = housenumber + (h && h.address ? " — " + h.address : "");
-        if (!confirm("Mark Stage " + stage + " released for " + label + "?\n\nYou'll be taken straight to its work orders to review.")) return;
-        localState.releases[relKey] = { released_at: new Date().toISOString(), by: "manual" };
-        saveState();
-        goToReconFor(housenumber, stage, { relKey: relKey, label: label });
-      });
-    });
-    document.querySelectorAll("[data-unmark-release]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        var relKey = btn.getAttribute("data-unmark-release");
-        delete localState.releases[relKey];
+        var relKey = btn.getAttribute("data-toggle-note");
+        if (localState.releases[relKey]) delete localState.releases[relKey];
+        else localState.releases[relKey] = { noted_at: new Date().toISOString() };
         saveState();
         renderQueue();
       });
@@ -361,13 +354,12 @@
     });
   }
 
-  function goToReconFor(housenumber, stage, releaseCtx) {
+  function goToReconFor(housenumber, stage) {
     activeView = "recon";
     document.querySelectorAll(".tab-btn").forEach(function (b) { b.classList.toggle("active", b.getAttribute("data-view") === "recon"); });
     ["Queue", "Recon", "House"].forEach(function (v) {
       document.getElementById("view" + v).style.display = (v === "Recon") ? "" : "none";
     });
-    renderReconBanner(releaseCtx || null);
     document.getElementById("reconHouseSearch").value = housenumber;
     activeReconStage = stage;
     document.querySelectorAll("#reconStageFilter .stage-btn").forEach(function (b) {
@@ -380,36 +372,19 @@
     renderRecon();
   }
 
-  function renderReconBanner(releaseCtx) {
-    var el = document.getElementById("reconBanner");
-    if (!releaseCtx) { el.innerHTML = ""; return; }
-    el.innerHTML = '<div class="banner"><span>Marked released: ' + releaseCtx.label +
-      ' — review its work orders below before moving on.</span>' +
-      '<span><button data-banner-undo="' + releaseCtx.relKey + '">Undo release</button> ' +
-      '<button class="dismiss" data-banner-dismiss>Dismiss</button></span></div>';
-    document.querySelector("[data-banner-undo]").addEventListener("click", function () {
-      delete localState.releases[releaseCtx.relKey];
-      saveState();
-      renderReconBanner(null);
-      renderRecon();
-    });
-    document.querySelector("[data-banner-dismiss]").addEventListener("click", function () {
-      renderReconBanner(null);
-    });
-  }
-
   function renderQueueRow(item) {
     var h = item.house, stage = item.stage, st = item.st;
     var relKey = h.key + "|" + stage;
+    var note = localState.releases[relKey];
     var badge, extra = "";
     var reviewBtn = '<button class="mark-btn" data-review-wos="' + h.housenumber + "|" + stage + '">Review released WOs</button>';
-    if (st.state === "released") {
-      badge = '<span class="badge badge-released">Released ' + st.info.released_at.slice(0, 10) + "</span>";
-      extra = '<button class="mark-btn" data-unmark-release="' + relKey + '">Undo</button> ' + reviewBtn;
-    } else if (st.state === "due") {
+    if (st.state === "due") {
       badge = '<span class="badge badge-due">Due now</span>';
       if (st.days != null) extra = '<span class="days-badge">' + (st.days >= 0 ? st.days + "d since submitted" : "") + "</span>";
-      extra += '<button class="mark-btn" data-mark-release="' + relKey + '">Mark released</button> ' + reviewBtn;
+      extra += " " + reviewBtn + ' <button class="mark-btn" data-toggle-note="' + relKey + '">' +
+        (note ? "Clear note" : "Note: I released this") + "</button>";
+      if (note) extra += ' <span class="small-muted">noted ' + note.noted_at.slice(0, 10) +
+        " — informational only, stage still comes from the API</span>";
     } else if (st.state === "blocked") {
       badge = '<span class="badge badge-notyet">Waiting on Stage ' + st.waitingOn + "</span>";
     } else {
@@ -535,7 +510,6 @@
         ["Queue", "Recon", "House"].forEach(function (v) {
           document.getElementById("view" + v).style.display = (v.toLowerCase() === activeView) ? "" : "none";
         });
-        renderReconBanner(null);
         renderActiveView();
       });
     });
@@ -566,7 +540,6 @@
     ["fCompany", "fDevelopment", "fModel"].forEach(function (id) {
       document.getElementById(id).addEventListener("change", renderActiveView);
     });
-    document.getElementById("showReleased").addEventListener("change", renderQueue);
     document.getElementById("showReviewed").addEventListener("change", renderRecon);
     document.getElementById("reconHouseSearch").addEventListener("input", renderRecon);
     document.getElementById("houseSearch").addEventListener("input", renderHouseSearch);
