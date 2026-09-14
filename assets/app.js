@@ -159,6 +159,28 @@
     return { state: "unknown" };
   }
 
+  var STAGE_ORDER = ["F", "L", "O", "Q"];
+
+  // A house should only ever have ONE actionable stage at a time: L can't be
+  // due until F is actually released, O until L, Q until O. Each stage's own
+  // condition (permit status / schedule date) is still evaluated independently
+  // above, but here we gate it behind the prior stage actually being released
+  // (or not applicable at all, e.g. F once the permit is past our review
+  // window) -- otherwise a house that's behind on F would also show L/O/Q as
+  // "due" just because their dates happened to pass too.
+  function gatedStatuses(house) {
+    var result = {};
+    var cleared = true;
+    STAGE_ORDER.forEach(function (stage, i) {
+      var effective = cleared
+        ? stageStatus(house, stage)
+        : { state: "blocked", waitingOn: STAGE_ORDER[i - 1] };
+      result[stage] = effective;
+      cleared = (effective.state === "released" || effective.state === "unknown");
+    });
+    return result;
+  }
+
   function buildRecon(budgetRows, woRows) {
     var byLine = {}; // companycode|housenumber|catcc -> {budget row, wos:[]}
     budgetRows.forEach(function (b) {
@@ -279,10 +301,10 @@
 
     houses.forEach(function (h) {
       if (!matchesFilters(h.companycode, h.developmentcode, h.modelcode)) return;
+      var gated = gatedStatuses(h);
       stages.forEach(function (stage) {
-        var st = stageStatus(h, stage);
+        var st = gated[stage];
         if (st.state === "unknown") return;
-        if (st.state === "notyet" && !showReleased) { /* still list, just not "due" */ }
         if (st.state === "released" && !showReleased) return;
         var devKey = h.companycode + " / " + h.developmentcode;
         (byDev[devKey] = byDev[devKey] || []).push({ house: h, stage: stage, st: st });
@@ -294,7 +316,7 @@
 
     var html = groups.map(function (g) {
       var items = byDev[g].sort(function (a, b) {
-        var order = { due: 0, notyet: 1, released: 2 };
+        var order = { due: 0, notyet: 1, blocked: 2, released: 3 };
         return (order[a.st.state] - order[b.st.state]) || a.house.housenumber.localeCompare(b.house.housenumber);
       });
       return '<div class="group-header">' + g + " — " + items.length + " item(s)</div>" +
@@ -356,6 +378,8 @@
       badge = '<span class="badge badge-due">Due now</span>';
       if (st.days != null) extra = '<span class="days-badge">' + (st.days >= 0 ? st.days + "d since submitted" : "") + "</span>";
       extra += '<button class="mark-btn" data-mark-release="' + relKey + '">Mark released</button> ' + reviewBtn;
+    } else if (st.state === "blocked") {
+      badge = '<span class="badge badge-notyet">Waiting on Stage ' + st.waitingOn + "</span>";
     } else {
       var when = st.date ? fmtDate(st.date) : (st.note || "not yet due");
       badge = '<span class="badge badge-notyet">' + when + "</span>";
@@ -448,9 +472,11 @@
     }).slice(0, 20);
     document.getElementById("houseBody").innerHTML = matches.map(function (h) {
       var lines = reconRows.filter(function (r) { return r.companycode === h.companycode && r.housenumber === h.housenumber; });
-      var stagesHtml = ["F", "L", "O", "Q"].map(function (s) {
-        var st = stageStatus(h, s);
-        return "<div><b>" + s + "</b>: " + st.state + (st.date ? " (" + fmtDate(st.date) + ")" : "") + "</div>";
+      var gated = gatedStatuses(h);
+      var stagesHtml = STAGE_ORDER.map(function (s) {
+        var st = gated[s];
+        var detail = st.date ? " (" + fmtDate(st.date) + ")" : st.waitingOn ? " (waiting on " + st.waitingOn + ")" : "";
+        return "<div><b>" + s + "</b>: " + st.state + detail + "</div>";
       }).join("");
       return '<div class="house-card"><h3>' + h.housenumber + " — " + (h.address || "") + '</h3>' +
         '<div class="house-meta">' + h.companycode + "/" + h.developmentcode + " · " + (h.modelcode || "") + " " + (h.elevationcode || "") +
