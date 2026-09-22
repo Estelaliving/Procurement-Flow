@@ -274,6 +274,7 @@
       var h = byKey[houseKey(r.companycode, r.housenumber)];
       r.address = h ? h.address : null;
       r.modelcode = h ? h.modelcode : null;
+      r.elevationcode = h ? h.elevationcode : null;
     });
   }
 
@@ -446,6 +447,7 @@
     }
     return '<div class="stage-row"><b>' + stage + "</b> — " + STAGE_LABEL[stage] + " · " +
       h.companycode + "/" + h.developmentcode + "/" + h.housenumber + " · " + (h.address || "") +
+      " · " + (h.modelcode || "—") + " " + (h.elevationcode || "") +
       (h.buyername ? " · " + h.buyername : "") + " " + badge + " " + extra + "</div>";
   }
 
@@ -488,6 +490,7 @@
       var first = lines[0];
       var header = first.companycode + "/" + first.developmentcode + "/" + first.housenumber +
         (first.address ? " — " + first.address : "") +
+        (first.modelcode ? " · " + first.modelcode + " " + (first.elevationcode || "") : "") +
         (dupCount ? ' <span class="badge badge-dup">' + dupCount + " duplicate cost code(s)</span>" : "");
       return '<div class="group-header">' + header + "</div>" +
         '<table><thead><tr><th>Cost Code</th><th>Description</th><th>Budget</th><th>Actual</th><th>WO Total</th><th>WO Count</th><th>Diff</th><th>Status</th><th></th></tr></thead><tbody>' +
