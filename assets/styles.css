@@ -15,6 +15,8 @@ body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 -apple-system
 #refreshBtn{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 10px;cursor:pointer}
 #refreshBtn:hover{border-color:var(--accent)}
 
+.recording-banner{background:var(--jobspec);color:#04262a;padding:10px 20px;font-size:13px;font-weight:600}
+.recording-banner a{color:#04262a;text-decoration:underline}
 .how-it-works{background:var(--panel2);border-bottom:1px solid var(--border);padding:10px 20px}
 .how-it-works summary{cursor:pointer;color:var(--accent);font-size:13px;font-weight:600}
 .how-it-works ol{margin:10px 0 6px;padding-left:20px;font-size:13px;line-height:1.6}
