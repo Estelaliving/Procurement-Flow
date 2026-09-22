@@ -11,11 +11,16 @@ joins them, and computes:
    be at — that only changes when the real systems change.
 2. **Budget vs WO Reconciliation** — every cost code with at least one released work order,
    compared line-by-line against the budget, flagging duplicates and amount mismatches.
+3. **Job-Specific Review** — a standing checklist for the 14 cost codes that depend on lot
+   size/site conditions (see below), which a dollar-tolerance flag can't meaningfully judge.
+   Every house, every one of those codes (with or without a WO yet), with a "reviewed against
+   drawings/site" checkbox. Rows are also tagged inline in Reconciliation, and jumping into
+   Reconciliation via "Review released WOs" surfaces a note if that stage touched any of them.
 
 Nothing is ever written back to the 4 source systems. The only things this app writes anywhere
 are purely informational bookkeeping — a personal "I released this" note (has zero effect on
-anything computed) and which reconciliation lines you've reviewed — stored in one small Supabase
-table, `procurement_flow_state`.
+anything computed), which reconciliation lines you've reviewed, and which job-specific lines
+you've checked against drawings — stored in one small Supabase table, `procurement_flow_state`.
 
 ## Sources (read-only)
 
@@ -68,3 +73,6 @@ table, `procurement_flow_state`.
   `|WO total − budget|` per cost code); more than one WO per house+cost-code = Duplicate.
 - Saw a `stagecode` value of `"I"` in the work orders data (outside F/L/O/Q) — displayed as-is,
   doesn't affect any logic, just flagging in case it's meaningful to you.
+- **Job-specific codes** (lot size / site condition dependent, reviewed by drawings rather than
+  a dollar tolerance): `200-01, 230-01, 230-03, 300-01, 310-01, 310-02, 430-01, 430-02, 430-03,
+  430-04, 430-05, 430-06, 435-01, 435-02`.
