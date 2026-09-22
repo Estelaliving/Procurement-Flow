@@ -200,14 +200,21 @@
     return result;
   }
 
-  function buildRecon(budgetRows, woRows) {
+  // Shared builder for both Reconciliation (requireWO: only lines with a
+  // released WO) and the Job-Specific checklist (no WO required, restricted
+  // to the 14 lot-dependent codes, since those need checking against
+  // drawings even before anything is released).
+  function buildCostCodeRows(budgetRows, woRows, opts) {
+    opts = opts || {};
     var byLine = {}; // companycode|housenumber|catcc -> {budget row, wos:[]}
     budgetRows.forEach(function (b) {
       var catcc = b.categorycode + "-" + b.costcode;
+      if (opts.onlyCodes && opts.onlyCodes.indexOf(catcc) < 0) return;
       var k = b.companycode + "|" + b.housenumber + "|" + catcc;
       byLine[k] = { budget: b, catcc: catcc, wos: [] };
     });
     woRows.forEach(function (w) {
+      if (opts.onlyCodes && opts.onlyCodes.indexOf(w.catcc) < 0) return;
       var k = w.companycode + "|" + w.housenumber + "|" + w.catcc;
       if (!byLine[k]) byLine[k] = { budget: null, catcc: w.catcc, wos: [] };
       byLine[k].wos.push(w);
@@ -216,62 +223,24 @@
     var rows = [];
     Object.keys(byLine).forEach(function (k) {
       var entry = byLine[k];
-      if (entry.wos.length === 0) return; // nothing released yet — not a reconciliation candidate
+      if (opts.requireWO && entry.wos.length === 0) return;
       var woTotal = entry.wos.reduce(function (s, w) { return s + (num(w.amount) || 0); }, 0);
       var budgetAmt = entry.budget ? num(entry.budget.budgetamount) : null;
       var actualAmt = entry.budget ? num(entry.budget.actual) : null;
-      var diff = budgetAmt == null ? null : woTotal - budgetAmt;
-      var absDiff = diff == null ? null : Math.abs(diff);
-      var isDup = entry.wos.length > 1;
-      var status;
-      if (isDup) status = "DUPLICATE";
-      else if (absDiff == null) status = "CAUTION";
-      else if (absDiff > FLAG_THRESHOLD) status = "FLAGGED";
-      else if (absDiff > CAUTION_THRESHOLD) status = "CAUTION";
-      else status = "OK";
+      var diff = null, status;
+      if (entry.wos.length === 0) {
+        status = "NO_WO";
+      } else {
+        diff = budgetAmt == null ? null : woTotal - budgetAmt;
+        var absDiff = diff == null ? null : Math.abs(diff);
+        var isDup = entry.wos.length > 1;
+        if (isDup) status = "DUPLICATE";
+        else if (absDiff == null) status = "CAUTION";
+        else if (absDiff > FLAG_THRESHOLD) status = "FLAGGED";
+        else if (absDiff > CAUTION_THRESHOLD) status = "CAUTION";
+        else status = "OK";
+      }
 
-      var first = entry.wos[0];
-      var parts = k.split("|");
-      rows.push({
-        key: k,
-        companycode: parts[0],
-        housenumber: parts[1],
-        catcc: entry.catcc,
-        developmentcode: (entry.budget && entry.budget.developmentcode) || first.developmentcode,
-        desccat: entry.budget ? entry.budget.desccat : "(no budget line)",
-        desccost: entry.budget ? entry.budget.desccost : first.description,
-        budgetAmt: budgetAmt, actualAmt: actualAmt, woTotal: woTotal,
-        woCount: entry.wos.length, wos: entry.wos, diff: diff, status: status,
-        isJobSpecific: JOB_SPECIFIC_CODES.indexOf(entry.catcc) >= 0
-      });
-    });
-    return rows;
-  }
-
-  // Every house's line for each of the 14 job-specific codes, WO or not --
-  // unlike buildRecon this does NOT require a work order to exist, since
-  // the budget itself needs checking against drawings from day one.
-  function buildJobSpecRows(budgetRows, woRows) {
-    var byLine = {};
-    budgetRows.forEach(function (b) {
-      var catcc = b.categorycode + "-" + b.costcode;
-      if (JOB_SPECIFIC_CODES.indexOf(catcc) < 0) return;
-      var k = b.companycode + "|" + b.housenumber + "|" + catcc;
-      byLine[k] = { budget: b, catcc: catcc, wos: [] };
-    });
-    woRows.forEach(function (w) {
-      if (JOB_SPECIFIC_CODES.indexOf(w.catcc) < 0) return;
-      var k = w.companycode + "|" + w.housenumber + "|" + w.catcc;
-      if (!byLine[k]) byLine[k] = { budget: null, catcc: w.catcc, wos: [] };
-      byLine[k].wos.push(w);
-    });
-
-    var rows = [];
-    Object.keys(byLine).forEach(function (k) {
-      var entry = byLine[k];
-      var woTotal = entry.wos.reduce(function (s, w) { return s + (num(w.amount) || 0); }, 0);
-      var budgetAmt = entry.budget ? num(entry.budget.budgetamount) : null;
-      var actualAmt = entry.budget ? num(entry.budget.actual) : null;
       var first = entry.wos[0];
       var parts = k.split("|");
       rows.push({
@@ -283,10 +252,19 @@
         desccat: entry.budget ? entry.budget.desccat : "(no budget line)",
         desccost: entry.budget ? entry.budget.desccost : (first ? first.description : ""),
         budgetAmt: budgetAmt, actualAmt: actualAmt, woTotal: woTotal,
-        woCount: entry.wos.length, wos: entry.wos
+        woCount: entry.wos.length, wos: entry.wos, diff: diff, status: status,
+        isJobSpecific: JOB_SPECIFIC_CODES.indexOf(entry.catcc) >= 0
       });
     });
     return rows;
+  }
+
+  function buildRecon(budgetRows, woRows) {
+    return buildCostCodeRows(budgetRows, woRows, { requireWO: true });
+  }
+
+  function buildJobSpecRows(budgetRows, woRows) {
+    return buildCostCodeRows(budgetRows, woRows, { requireWO: false, onlyCodes: JOB_SPECIFIC_CODES });
   }
 
   function attachHouseInfo(recon, houseList) {
@@ -411,7 +389,7 @@
   function goToReconFor(housenumber, stage) {
     activeView = "recon";
     document.querySelectorAll(".tab-btn").forEach(function (b) { b.classList.toggle("active", b.getAttribute("data-view") === "recon"); });
-    ["Queue", "Recon", "JobSpec", "House"].forEach(function (v) {
+    ["Queue", "Recon", "House"].forEach(function (v) {
       document.getElementById("view" + v).style.display = (v === "Recon") ? "" : "none";
     });
     document.getElementById("reconHouseSearch").value = housenumber;
@@ -429,29 +407,22 @@
 
   function renderReconJobSpecNote(housenumber, stage) {
     var el = document.getElementById("reconJobSpecNote");
-    var matches = reconRows.filter(function (r) {
-      return r.housenumber === housenumber && r.isJobSpecific &&
+    var matches = jobSpecRows.filter(function (r) {
+      return r.housenumber === housenumber &&
         (stage === "ALL" || r.wos.some(function (w) { return w.stagecode === stage; }));
     });
     if (matches.length === 0) { el.innerHTML = ""; return; }
     var codes = matches.map(function (r) { return r.catcc; }).join(", ");
     el.innerHTML = '<div class="note-banner"><span>This includes ' + matches.length +
       " job-specific cost code(s) (" + codes + ") — confirm budget/WO match the drawings and site measurements.</span>" +
-      '<button data-goto-jobspec="' + housenumber + '">Open in Job-Specific Review</button></div>';
-    document.querySelector("[data-goto-jobspec]").addEventListener("click", function () {
-      goToJobSpecFor(housenumber);
+      '<button data-show-jobspec>Show Job-Specific rows for this house</button></div>';
+    document.querySelector("[data-show-jobspec]").addEventListener("click", function () {
+      activeReconStatus = "JOBSPEC";
+      document.querySelectorAll("#reconStatusFilter .stage-btn").forEach(function (b) {
+        b.classList.toggle("active", b.getAttribute("data-status") === "JOBSPEC");
+      });
+      renderRecon();
     });
-  }
-
-  function goToJobSpecFor(housenumber) {
-    activeView = "jobspec";
-    document.querySelectorAll(".tab-btn").forEach(function (b) { b.classList.toggle("active", b.getAttribute("data-view") === "jobspec"); });
-    ["Queue", "Recon", "JobSpec", "House"].forEach(function (v) {
-      document.getElementById("view" + v).style.display = (v === "JobSpec") ? "" : "none";
-    });
-    document.getElementById("jobSpecHouseSearch").value = housenumber;
-    document.getElementById("showJobSpecReviewed").checked = true;
-    renderJobSpec();
   }
 
   function renderQueueRow(item) {
@@ -479,15 +450,23 @@
   }
 
   // ---- Render: Reconciliation ------------------------------------------------------------
+  // The "Job-Specific" filter swaps the row source to jobSpecRows (every
+  // house, all 14 lot-dependent codes, WO or not); every other filter uses
+  // reconRows (only lines with a released WO) as before. Either way, any
+  // job-specific row always gets its own "matches drawings/site" checkbox
+  // in addition to whatever amount-status action normally applies, so you
+  // never have to leave this view to find it.
   function renderRecon() {
     var showReviewed = document.getElementById("showReviewed").checked;
     var q = (document.getElementById("reconHouseSearch").value || "").trim().toUpperCase();
-    var rows = reconRows.filter(function (r) {
+    var isJobSpecFilter = activeReconStatus === "JOBSPEC";
+    var sourceRows = isJobSpecFilter ? jobSpecRows : reconRows;
+    var rows = sourceRows.filter(function (r) {
       if (!matchesFilters(r.companycode, r.developmentcode, r.modelcode)) return false;
-      if (activeReconStatus !== "ALL" && r.status !== activeReconStatus) return false;
+      if (!isJobSpecFilter && activeReconStatus !== "ALL" && r.status !== activeReconStatus) return false;
       if (activeReconStage !== "ALL" && !r.wos.some(function (w) { return w.stagecode === activeReconStage; })) return false;
-      var reviewed = localState.reconReviewed[r.key];
-      if (reviewed && !showReviewed) return false;
+      var reviewedKey = isJobSpecFilter ? localState.jobSpecReviewed[r.key] : localState.reconReviewed[r.key];
+      if (reviewedKey && !showReviewed) return false;
       if (q && r.housenumber.indexOf(q) < 0 && (r.address || "").toUpperCase().indexOf(q) < 0) return false;
       return true;
     });
@@ -502,7 +481,7 @@
 
     var html = houseKeys.map(function (hk) {
       var lines = byHouse[hk].sort(function (a, b) {
-        var order = { DUPLICATE: 0, FLAGGED: 1, CAUTION: 2, OK: 3 };
+        var order = { DUPLICATE: 0, FLAGGED: 1, CAUTION: 2, NO_WO: 3, OK: 4 };
         return (order[a.status] - order[b.status]) || a.catcc.localeCompare(b.catcc);
       });
       var dupCount = lines.filter(function (l) { return l.status === "DUPLICATE"; }).length;
@@ -532,71 +511,12 @@
         renderRecon();
       });
     });
-  }
-
-  function renderReconRow(r) {
-    var badgeClass = { OK: "badge-ok", CAUTION: "badge-caution", FLAGGED: "badge-flag", DUPLICATE: "badge-dup" }[r.status];
-    var diffClass = r.diff > 0 ? "diff-pos" : r.diff < 0 ? "diff-neg" : "";
-    var reviewed = localState.reconReviewed[r.key];
-    var woList = r.wos.map(function (w) { return w.workordernumber + " (" + w.vendorname + ", " + fmtMoney(num(w.amount)) + ", " + w.wodate + (w.stagecode ? ", stage " + w.stagecode : "") + ")"; }).join("<br>");
-    return "<tr><td>" + r.catcc + (r.isJobSpecific ? ' <span class="badge badge-jobspec">Job-Specific</span>' : "") + "</td>" +
-      "<td>" + r.desccat + (r.desccost ? " — " + r.desccost : "") + "</td>" +
-      "<td>" + fmtMoney(r.budgetAmt) + "</td>" +
-      "<td>" + fmtMoney(r.actualAmt) + "</td>" +
-      "<td>" + fmtMoney(r.woTotal) + "<div class='small-muted'>" + woList + "</div></td>" +
-      "<td>" + r.woCount + "</td>" +
-      "<td class='" + diffClass + "'>" + (r.diff == null ? "—" : fmtMoney(r.diff)) + "</td>" +
-      '<td><span class="badge ' + badgeClass + '">' + r.status + "</span></td>" +
-      "<td>" + (reviewed
-        ? '<button class="mark-btn" data-unreview="' + r.key + '">Unreview</button>'
-        : '<button class="mark-btn" data-review="' + r.key + '">Mark reviewed</button>') + "</td></tr>";
-  }
-
-  // ---- Render: Job-Specific Review ------------------------------------------------------------
-  function renderJobSpec() {
-    var showReviewed = document.getElementById("showJobSpecReviewed").checked;
-    var q = (document.getElementById("jobSpecHouseSearch").value || "").trim().toUpperCase();
-    var rows = jobSpecRows.filter(function (r) {
-      if (!matchesFilters(r.companycode, r.developmentcode, r.modelcode)) return false;
-      var reviewed = localState.jobSpecReviewed[r.key];
-      if (reviewed && !showReviewed) return false;
-      if (q && r.housenumber.indexOf(q) < 0 && (r.address || "").toUpperCase().indexOf(q) < 0) return false;
-      return true;
-    });
-    if (rows.length === 0) {
-      document.getElementById("jobSpecBody").innerHTML = "<p class='small-muted'>" +
-        (showReviewed ? "No lines match." : "Nothing left to review with current filters — toggle \"Show already-reviewed lines\" to see everything.") +
-        "</p>";
-      return;
-    }
-
-    var byHouse = {};
-    rows.forEach(function (r) {
-      var hk = houseKey(r.companycode, r.housenumber);
-      (byHouse[hk] = byHouse[hk] || []).push(r);
-    });
-    var houseKeys = Object.keys(byHouse).sort();
-
-    var html = houseKeys.map(function (hk) {
-      var lines = byHouse[hk].sort(function (a, b) { return a.catcc.localeCompare(b.catcc); });
-      var first = lines[0];
-      var allForHouse = jobSpecRows.filter(function (r) { return houseKey(r.companycode, r.housenumber) === hk; });
-      var reviewedCount = allForHouse.filter(function (r) { return localState.jobSpecReviewed[r.key]; }).length;
-      var header = first.companycode + "/" + first.developmentcode + "/" + first.housenumber +
-        (first.address ? " — " + first.address : "") +
-        ' <span class="small-muted">(' + reviewedCount + "/" + allForHouse.length + " reviewed)</span>";
-      return '<div class="group-header">' + header + "</div>" +
-        '<table><thead><tr><th>Cost Code</th><th>Description</th><th>Budget</th><th>Actual</th><th>WO Total / Details</th><th></th></tr></thead><tbody>' +
-        lines.map(renderJobSpecRow).join("") + "</tbody></table>";
-    }).join("");
-    document.getElementById("jobSpecBody").innerHTML = html;
-
     document.querySelectorAll("[data-jobspec-review]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var key = btn.getAttribute("data-jobspec-review");
         localState.jobSpecReviewed[key] = { reviewed_at: new Date().toISOString() };
         saveState();
-        renderJobSpec();
+        renderRecon();
       });
     });
     document.querySelectorAll("[data-jobspec-unreview]").forEach(function (btn) {
@@ -604,24 +524,41 @@
         var key = btn.getAttribute("data-jobspec-unreview");
         delete localState.jobSpecReviewed[key];
         saveState();
-        renderJobSpec();
+        renderRecon();
       });
     });
   }
 
-  function renderJobSpecRow(r) {
-    var reviewed = localState.jobSpecReviewed[r.key];
+  function renderReconRow(r) {
+    var badgeClass = { OK: "badge-ok", CAUTION: "badge-caution", FLAGGED: "badge-flag", DUPLICATE: "badge-dup", NO_WO: "badge-notyet" }[r.status];
+    var statusLabel = r.status === "NO_WO" ? "No WO yet" : r.status;
+    var diffClass = r.diff > 0 ? "diff-pos" : r.diff < 0 ? "diff-neg" : "";
+    var reviewed = localState.reconReviewed[r.key];
+    var jobSpecReviewed = localState.jobSpecReviewed[r.key];
     var woList = r.wos.length
       ? r.wos.map(function (w) { return w.workordernumber + " (" + w.vendorname + ", " + fmtMoney(num(w.amount)) + ", " + w.wodate + (w.stagecode ? ", stage " + w.stagecode : "") + ")"; }).join("<br>")
       : "<span class='small-muted'>No WO yet</span>";
-    return "<tr" + (reviewed ? ' style="opacity:.55"' : "") + "><td>" + r.catcc + "</td>" +
+
+    var actions = r.woCount > 0
+      ? (reviewed
+          ? '<button class="mark-btn" data-unreview="' + r.key + '">Unreview</button>'
+          : '<button class="mark-btn" data-review="' + r.key + '">Mark reviewed</button>')
+      : "";
+    if (r.isJobSpecific) {
+      actions += " " + (jobSpecReviewed
+        ? '<button class="mark-btn" data-jobspec-unreview="' + r.key + '">Drawings ✓ ' + jobSpecReviewed.reviewed_at.slice(0, 10) + " — undo</button>"
+        : '<button class="mark-btn" data-jobspec-review="' + r.key + '">Mark reviewed — matches drawings/site</button>');
+    }
+
+    return "<tr><td>" + r.catcc + (r.isJobSpecific ? ' <span class="badge badge-jobspec">Job-Specific</span>' : "") + "</td>" +
       "<td>" + r.desccat + (r.desccost ? " — " + r.desccost : "") + "</td>" +
       "<td>" + fmtMoney(r.budgetAmt) + "</td>" +
       "<td>" + fmtMoney(r.actualAmt) + "</td>" +
       "<td>" + fmtMoney(r.woTotal) + "<div class='small-muted'>" + woList + "</div></td>" +
-      "<td>" + (reviewed
-        ? '<button class="mark-btn" data-jobspec-unreview="' + r.key + '">Reviewed ' + reviewed.reviewed_at.slice(0, 10) + " — undo</button>"
-        : '<button class="mark-btn" data-jobspec-review="' + r.key + '">Mark reviewed — matches drawings/site</button>') + "</td></tr>";
+      "<td>" + r.woCount + "</td>" +
+      "<td class='" + diffClass + "'>" + (r.diff == null ? "—" : fmtMoney(r.diff)) + "</td>" +
+      '<td><span class="badge ' + badgeClass + '">' + statusLabel + "</span></td>" +
+      "<td>" + actions + "</td></tr>";
   }
 
   // ---- Render: House lookup ------------------------------------------------------------
@@ -652,7 +589,6 @@
   function renderActiveView() {
     if (activeView === "queue") renderQueue();
     else if (activeView === "recon") renderRecon();
-    else if (activeView === "jobspec") renderJobSpec();
     else renderHouseSearch();
   }
 
@@ -662,7 +598,7 @@
         document.querySelectorAll(".tab-btn").forEach(function (b) { b.classList.remove("active"); });
         btn.classList.add("active");
         activeView = btn.getAttribute("data-view");
-        ["Queue", "Recon", "JobSpec", "House"].forEach(function (v) {
+        ["Queue", "Recon", "House"].forEach(function (v) {
           document.getElementById("view" + v).style.display = (v.toLowerCase() === activeView) ? "" : "none";
         });
         document.getElementById("reconJobSpecNote").innerHTML = "";
@@ -698,8 +634,6 @@
     });
     document.getElementById("showReviewed").addEventListener("change", renderRecon);
     document.getElementById("reconHouseSearch").addEventListener("input", renderRecon);
-    document.getElementById("showJobSpecReviewed").addEventListener("change", renderJobSpec);
-    document.getElementById("jobSpecHouseSearch").addEventListener("input", renderJobSpec);
     document.getElementById("houseSearch").addEventListener("input", renderHouseSearch);
     document.getElementById("refreshBtn").addEventListener("click", refresh);
   }

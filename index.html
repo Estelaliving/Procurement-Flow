@@ -23,7 +23,7 @@
     <li><b>Release Queue</b> — shows which houses have a stage (F/L/O/Q) due right now. This is a live mirror of your systems: it never releases anything itself, it only tells you what's ready.</li>
     <li>Go release that stage in your normal system (permit tracker / house release / BuildPro, etc.) — this page has no write access anywhere and can't do that step for you.</li>
     <li>Back here, click <b>Review released WOs</b> on that row to jump straight to the work orders that release produced, checked for duplicates and budget mismatches.</li>
-    <li>If any of those cost codes are tagged <b>Job-Specific</b>, go confirm them in the <b>Job-Specific Review</b> tab — those depend on lot size / site conditions, not a fixed budget, so they need a human check against the drawings rather than an automatic flag.</li>
+    <li>Any cost code tagged <b>Job-Specific</b> depends on lot size / site conditions, not a fixed budget — its OK/Caution/Flagged badge isn't meaningful, so confirm it against the drawings and check the separate "matches drawings/site" box instead. Use the <b>Job-Specific</b> filter to see every one of those 14 codes for every house, including ones with no work order yet.</li>
     <li>Use <b>House Lookup</b> any time to see one house's complete picture across every system.</li>
   </ol>
   <p class="small-muted">Everything shown is computed live from the source APIs on every refresh. The only things this page ever remembers on its own are optional notes and review checkmarks you add — they never change what stage a house is at or hide anything.</p>
@@ -32,7 +32,6 @@
 <nav class="tabs">
   <button class="tab-btn active" data-view="queue" type="button">Release Queue</button>
   <button class="tab-btn" data-view="recon" type="button">Budget vs WO Reconciliation</button>
-  <button class="tab-btn" data-view="jobspec" type="button">Job-Specific Review</button>
   <button class="tab-btn" data-view="house" type="button">House Lookup</button>
 </nav>
 
@@ -63,7 +62,7 @@
   </section>
 
   <section id="viewRecon" class="view" style="display:none">
-    <p class="view-hint">Every cost code with at least one released work order, checked line-by-line against budget. Rows tagged <b>Job-Specific</b> depend on lot size — verify those in the Job-Specific Review tab instead of trusting the OK/Caution/Flagged badge alone.</p>
+    <p class="view-hint">Every cost code with at least one released work order, checked line-by-line against budget. Rows tagged <b>Job-Specific</b> depend on lot size and site conditions — their OK/Caution/Flagged badge isn't meaningful; confirm those against the drawings using their separate checkbox instead. The <b>Job-Specific</b> filter shows all 14 of those codes for every house, including ones with no work order released yet.</p>
     <div id="reconJobSpecNote"></div>
     <input id="reconHouseSearch" type="text" placeholder="Jump to one house — house number or address…">
     <div class="stage-filter" id="reconStageFilter">
@@ -79,20 +78,12 @@
       <button class="stage-btn" data-status="FLAGGED" type="button">Flagged</button>
       <button class="stage-btn" data-status="CAUTION" type="button">Caution</button>
       <button class="stage-btn" data-status="OK" type="button">OK</button>
+      <button class="stage-btn" data-status="JOBSPEC" type="button">Job-Specific (incl. no WO yet)</button>
     </div>
     <label class="show-released-toggle">
       <input type="checkbox" id="showReviewed"> Show reviewed/dismissed lines
     </label>
     <div id="reconBody">Loading…</div>
-  </section>
-
-  <section id="viewJobSpec" class="view" style="display:none">
-    <p class="view-hint">These 14 cost codes depend on lot size and site-specific drawings, so they can't be auto-checked against a fixed budget the way other codes are. Every house, every one of these codes, needs a human to confirm the budget and work order actually match the drawings/site measurements — check it off once done. This list never shrinks on its own; it only reflects what you've checked here.</p>
-    <input id="jobSpecHouseSearch" type="text" placeholder="Jump to one house — house number or address…">
-    <label class="show-released-toggle">
-      <input type="checkbox" id="showJobSpecReviewed"> Show already-reviewed lines
-    </label>
-    <div id="jobSpecBody">Loading…</div>
   </section>
 
   <section id="viewHouse" class="view" style="display:none">
