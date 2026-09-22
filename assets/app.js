@@ -35,7 +35,7 @@
   // tolerance doesn't mean anything for these, so they get their own
   // always-visible checklist instead of an amount-based flag.
   var JOB_SPECIFIC_CODES = [
-    "200-01", "230-01", "230-03", "300-01", "310-01", "310-02",
+    "200-01", "230-01", "230-03", "230-07", "300-01", "310-01", "310-02",
     "430-01", "430-02", "430-03", "430-04", "430-05", "430-06", "435-01", "435-02"
   ];
 

@@ -75,5 +75,5 @@ you've checked against drawings — stored in one small Supabase table, `procure
 - Saw a `stagecode` value of `"I"` in the work orders data (outside F/L/O/Q) — displayed as-is,
   doesn't affect any logic, just flagging in case it's meaningful to you.
 - **Job-specific codes** (lot size / site condition dependent, reviewed by drawings rather than
-  a dollar tolerance): `200-01, 230-01, 230-03, 300-01, 310-01, 310-02, 430-01, 430-02, 430-03,
-  430-04, 430-05, 430-06, 435-01, 435-02`.
+  a dollar tolerance): `200-01, 230-01, 230-03, 230-07, 300-01, 310-01, 310-02, 430-01, 430-02,
+  430-03, 430-04, 430-05, 430-06, 435-01, 435-02`.
