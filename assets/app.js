@@ -41,8 +41,9 @@
 
   // ---- State ------------------------------------------------------------
   var houses = [];       // joined house+permit+release rows
-  var reconRows = [];    // joined budget+WO rows
+  var reconRows = [];    // joined budget+WO rows, only lines with a released WO
   var jobSpecRows = [];  // budget(+WO) rows restricted to JOB_SPECIFIC_CODES, all houses
+  var allCostCodeRows = []; // every budget line for every house, WO or not, any cost code
   var localState = { releases: {}, reconReviewed: {}, jobSpecReviewed: {} };
   var sb = null;
   var activeView = "queue";
@@ -267,6 +268,10 @@
     return buildCostCodeRows(budgetRows, woRows, { requireWO: false, onlyCodes: JOB_SPECIFIC_CODES });
   }
 
+  function buildAllCostCodeRows(budgetRows, woRows) {
+    return buildCostCodeRows(budgetRows, woRows, { requireWO: false });
+  }
+
   function attachHouseInfo(recon, houseList) {
     var byKey = {};
     houseList.forEach(function (h) { byKey[h.key] = h; });
@@ -295,6 +300,8 @@
         attachHouseInfo(reconRows, houses);
         jobSpecRows = buildJobSpecRows(budgetRows, woRows);
         attachHouseInfo(jobSpecRows, houses);
+        allCostCodeRows = buildAllCostCodeRows(budgetRows, woRows);
+        attachHouseInfo(allCostCodeRows, houses);
         populateFilters();
         renderActiveView();
         setSyncStatus("ok", "Live — last synced " + new Date().toLocaleTimeString());
@@ -456,8 +463,11 @@
 
   // ---- Render: Reconciliation ------------------------------------------------------------
   // The "Job-Specific" filter swaps the row source to jobSpecRows (every
-  // house, all 14 lot-dependent codes, WO or not); every other filter uses
-  // reconRows (only lines with a released WO) as before. Either way, any
+  // house, all 14 lot-dependent codes, WO or not); "All cost codes (incl. no
+  // WO yet)" swaps to allCostCodeRows (every house, every cost code, WO or
+  // not) -- useful for e.g. "does any BX2/A2 house have a siding line at
+  // all, released or just budgeted" via the search box. Every other filter
+  // uses reconRows (only lines with a released WO) as before. Either way, any
   // job-specific row always gets its own "matches drawings/site" checkbox
   // in addition to whatever amount-status action normally applies, so you
   // never have to leave this view to find it.
@@ -465,10 +475,11 @@
     var showReviewed = document.getElementById("showReviewed").checked;
     var q = (document.getElementById("reconHouseSearch").value || "").trim().toUpperCase();
     var isJobSpecFilter = activeReconStatus === "JOBSPEC";
-    var sourceRows = isJobSpecFilter ? jobSpecRows : reconRows;
+    var isAllCodesFilter = activeReconStatus === "ALLCODES";
+    var sourceRows = isJobSpecFilter ? jobSpecRows : (isAllCodesFilter ? allCostCodeRows : reconRows);
     var rows = sourceRows.filter(function (r) {
       if (!matchesFilters(r.companycode, r.developmentcode, r.modelcode, r.elevationcode)) return false;
-      if (!isJobSpecFilter && activeReconStatus !== "ALL" && r.status !== activeReconStatus) return false;
+      if (!isJobSpecFilter && !isAllCodesFilter && activeReconStatus !== "ALL" && r.status !== activeReconStatus) return false;
       if (activeReconStage !== "ALL" && !r.wos.some(function (w) { return w.stagecode === activeReconStage; })) return false;
       var reviewedKey = isJobSpecFilter ? localState.jobSpecReviewed[r.key] : localState.reconReviewed[r.key];
       if (reviewedKey && !showReviewed) return false;
