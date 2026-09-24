@@ -34,6 +34,17 @@ body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 -apple-system
 .filters label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
 select,input[type=text]{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px}
 
+.multiselect{position:relative;display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
+.ms-toggle{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer;min-width:110px;text-align:left}
+.ms-toggle:hover{border-color:var(--accent)}
+.ms-toggle.active-filter{border-color:var(--accent);color:var(--accent)}
+.ms-panel{position:absolute;top:100%;left:0;margin-top:4px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:8px;min-width:160px;max-height:220px;overflow-y:auto;z-index:20;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.ms-actions{display:flex;gap:6px;margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.ms-actions button{background:var(--panel2);color:var(--muted);border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer}
+.ms-actions button:hover{color:var(--text);border-color:var(--accent)}
+.ms-options label{display:flex;align-items:center;gap:6px;padding:3px 2px;font-size:13px;color:var(--text);white-space:nowrap;cursor:pointer}
+.ms-options input{cursor:pointer}
+
 main{padding:16px 20px 60px}
 .stage-filter{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
 .stage-btn{background:var(--panel2);color:var(--muted);border:1px solid var(--border);border-radius:20px;padding:6px 14px;cursor:pointer;font-size:12px}

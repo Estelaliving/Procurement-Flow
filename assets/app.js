@@ -313,35 +313,103 @@
   }
 
   // ---- Filters ------------------------------------------------------------
+  // Each of Company/Development/Model/Elevation is a multi-select: an empty
+  // array means "All" (no restriction), a non-empty array means "any of
+  // these". Selections persist across refreshes; option lists get rebuilt
+  // as live data changes, dropping any selected value that no longer exists.
+  var MS_KEYS = ["company", "development", "model", "elevation"];
+  var msSelected = { company: [], development: [], model: [], elevation: [] };
+
   function currentFilters() {
     return {
-      company: document.getElementById("fCompany").value,
-      development: document.getElementById("fDevelopment").value,
-      model: document.getElementById("fModel").value,
-      elevation: document.getElementById("fElevation").value
+      company: msSelected.company,
+      development: msSelected.development,
+      model: msSelected.model,
+      elevation: msSelected.elevation
     };
   }
-  function populateFilters() {
-    fillSelect("fCompany", uniq(houses.map(function (h) { return h.companycode; })));
-    fillSelect("fDevelopment", uniq(houses.map(function (h) { return h.developmentcode; })));
-    fillSelect("fModel", uniq(houses.map(function (h) { return h.modelcode; })));
-    fillSelect("fElevation", uniq(houses.map(function (h) { return h.elevationcode; })));
-  }
   function uniq(arr) { return Array.from(new Set(arr.filter(Boolean))).sort(); }
-  function fillSelect(id, values) {
-    var el = document.getElementById(id);
-    var current = el.value;
-    el.innerHTML = '<option value="">All</option>' + values.map(function (v) {
-      return '<option value="' + v + '">' + v + "</option>";
-    }).join("");
-    if (values.indexOf(current) >= 0) el.value = current;
+
+  function populateFilters() {
+    var valuesByKey = {
+      company: uniq(houses.map(function (h) { return h.companycode; })),
+      development: uniq(houses.map(function (h) { return h.developmentcode; })),
+      model: uniq(houses.map(function (h) { return h.modelcode; })),
+      elevation: uniq(houses.map(function (h) { return h.elevationcode; }))
+    };
+    MS_KEYS.forEach(function (key) {
+      var values = valuesByKey[key];
+      msSelected[key] = msSelected[key].filter(function (v) { return values.indexOf(v) >= 0; });
+      var panel = document.querySelector('.multiselect[data-ms="' + key + '"] .ms-options');
+      panel.innerHTML = values.map(function (v) {
+        var checked = msSelected[key].indexOf(v) >= 0 ? " checked" : "";
+        return '<label><input type="checkbox" value="' + v + '"' + checked + "> " + v + "</label>";
+      }).join("");
+      panel.querySelectorAll("input").forEach(function (cb) {
+        cb.addEventListener("change", function () {
+          var v = cb.value;
+          var idx = msSelected[key].indexOf(v);
+          if (cb.checked && idx < 0) msSelected[key].push(v);
+          else if (!cb.checked && idx >= 0) msSelected[key].splice(idx, 1);
+          updateMsToggleLabel(key);
+          renderActiveView();
+        });
+      });
+      updateMsToggleLabel(key);
+    });
   }
+
+  function updateMsToggleLabel(key) {
+    var wrap = document.querySelector('.multiselect[data-ms="' + key + '"]');
+    var btn = wrap.querySelector(".ms-toggle");
+    var sel = msSelected[key];
+    btn.textContent = sel.length === 0 ? "All" : sel.length <= 2 ? sel.join(", ") : sel.length + " selected";
+    btn.classList.toggle("active-filter", sel.length > 0);
+  }
+
+  function closeAllMsPanels(exceptKey) {
+    document.querySelectorAll(".multiselect").forEach(function (wrap) {
+      if (wrap.getAttribute("data-ms") === exceptKey) return;
+      wrap.querySelector(".ms-panel").hidden = true;
+    });
+  }
+
+  function wireMultiSelects() {
+    document.querySelectorAll(".multiselect").forEach(function (wrap) {
+      var key = wrap.getAttribute("data-ms");
+      var panel = wrap.querySelector(".ms-panel");
+      // Without this, any click inside the panel (a checkbox, All/None)
+      // bubbles up to the document-level listener below and immediately
+      // closes the panel it just happened in.
+      wrap.addEventListener("click", function (e) { e.stopPropagation(); });
+      wrap.querySelector(".ms-toggle").addEventListener("click", function (e) {
+        e.stopPropagation();
+        var willOpen = panel.hidden;
+        closeAllMsPanels(key);
+        panel.hidden = !willOpen;
+      });
+      wrap.querySelector("[data-ms-all]").addEventListener("click", function () {
+        panel.querySelectorAll("input").forEach(function (cb) { cb.checked = true; });
+        msSelected[key] = Array.from(panel.querySelectorAll("input")).map(function (cb) { return cb.value; });
+        updateMsToggleLabel(key);
+        renderActiveView();
+      });
+      wrap.querySelector("[data-ms-none]").addEventListener("click", function () {
+        panel.querySelectorAll("input").forEach(function (cb) { cb.checked = false; });
+        msSelected[key] = [];
+        updateMsToggleLabel(key);
+        renderActiveView();
+      });
+    });
+    document.addEventListener("click", function () { closeAllMsPanels(null); });
+  }
+
   function matchesFilters(companycode, developmentcode, modelcode, elevationcode) {
     var f = currentFilters();
-    if (f.company && companycode !== f.company) return false;
-    if (f.development && developmentcode !== f.development) return false;
-    if (f.model && modelcode && modelcode !== f.model) return false;
-    if (f.elevation && elevationcode && elevationcode !== f.elevation) return false;
+    if (f.company.length && f.company.indexOf(companycode) < 0) return false;
+    if (f.development.length && f.development.indexOf(developmentcode) < 0) return false;
+    if (f.model.length && modelcode && f.model.indexOf(modelcode) < 0) return false;
+    if (f.elevation.length && elevationcode && f.elevation.indexOf(elevationcode) < 0) return false;
     return true;
   }
 
@@ -655,9 +723,7 @@
         renderRecon();
       });
     });
-    ["fCompany", "fDevelopment", "fModel", "fElevation"].forEach(function (id) {
-      document.getElementById(id).addEventListener("change", renderActiveView);
-    });
+    wireMultiSelects();
     document.getElementById("showReviewed").addEventListener("change", renderRecon);
     document.getElementById("reconHouseSearch").addEventListener("input", renderRecon);
     document.getElementById("houseSearch").addEventListener("input", renderHouseSearch);

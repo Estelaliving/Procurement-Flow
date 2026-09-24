@@ -40,18 +40,38 @@
 </nav>
 
 <div class="filters" id="globalFilters">
-  <label>Company
-    <select id="fCompany"><option value="">All</option></select>
-  </label>
-  <label>Development
-    <select id="fDevelopment"><option value="">All</option></select>
-  </label>
-  <label>Model
-    <select id="fModel"><option value="">All</option></select>
-  </label>
-  <label>Elevation
-    <select id="fElevation"><option value="">All</option></select>
-  </label>
+  <div class="multiselect" data-ms="company">
+    <span class="ms-label">Company</span>
+    <button class="ms-toggle" type="button">All</button>
+    <div class="ms-panel" hidden>
+      <div class="ms-actions"><button type="button" data-ms-all>All</button><button type="button" data-ms-none>None</button></div>
+      <div class="ms-options"></div>
+    </div>
+  </div>
+  <div class="multiselect" data-ms="development">
+    <span class="ms-label">Development</span>
+    <button class="ms-toggle" type="button">All</button>
+    <div class="ms-panel" hidden>
+      <div class="ms-actions"><button type="button" data-ms-all>All</button><button type="button" data-ms-none>None</button></div>
+      <div class="ms-options"></div>
+    </div>
+  </div>
+  <div class="multiselect" data-ms="model">
+    <span class="ms-label">Model</span>
+    <button class="ms-toggle" type="button">All</button>
+    <div class="ms-panel" hidden>
+      <div class="ms-actions"><button type="button" data-ms-all>All</button><button type="button" data-ms-none>None</button></div>
+      <div class="ms-options"></div>
+    </div>
+  </div>
+  <div class="multiselect" data-ms="elevation">
+    <span class="ms-label">Elevation</span>
+    <button class="ms-toggle" type="button">All</button>
+    <div class="ms-panel" hidden>
+      <div class="ms-actions"><button type="button" data-ms-all>All</button><button type="button" data-ms-none>None</button></div>
+      <div class="ms-options"></div>
+    </div>
+  </div>
 </div>
 
 <main>
