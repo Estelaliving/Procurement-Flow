@@ -310,13 +310,15 @@
     return {
       company: document.getElementById("fCompany").value,
       development: document.getElementById("fDevelopment").value,
-      model: document.getElementById("fModel").value
+      model: document.getElementById("fModel").value,
+      elevation: document.getElementById("fElevation").value
     };
   }
   function populateFilters() {
     fillSelect("fCompany", uniq(houses.map(function (h) { return h.companycode; })));
     fillSelect("fDevelopment", uniq(houses.map(function (h) { return h.developmentcode; })));
     fillSelect("fModel", uniq(houses.map(function (h) { return h.modelcode; })));
+    fillSelect("fElevation", uniq(houses.map(function (h) { return h.elevationcode; })));
   }
   function uniq(arr) { return Array.from(new Set(arr.filter(Boolean))).sort(); }
   function fillSelect(id, values) {
@@ -327,11 +329,12 @@
     }).join("");
     if (values.indexOf(current) >= 0) el.value = current;
   }
-  function matchesFilters(companycode, developmentcode, modelcode) {
+  function matchesFilters(companycode, developmentcode, modelcode, elevationcode) {
     var f = currentFilters();
     if (f.company && companycode !== f.company) return false;
     if (f.development && developmentcode !== f.development) return false;
     if (f.model && modelcode && modelcode !== f.model) return false;
+    if (f.elevation && elevationcode && elevationcode !== f.elevation) return false;
     return true;
   }
 
@@ -347,7 +350,7 @@
     var byDev = {};
 
     houses.forEach(function (h) {
-      if (!matchesFilters(h.companycode, h.developmentcode, h.modelcode)) return;
+      if (!matchesFilters(h.companycode, h.developmentcode, h.modelcode, h.elevationcode)) return;
       var gated = gatedStatuses(h);
       stages.forEach(function (stage) {
         var st = gated[stage];
@@ -464,12 +467,16 @@
     var isJobSpecFilter = activeReconStatus === "JOBSPEC";
     var sourceRows = isJobSpecFilter ? jobSpecRows : reconRows;
     var rows = sourceRows.filter(function (r) {
-      if (!matchesFilters(r.companycode, r.developmentcode, r.modelcode)) return false;
+      if (!matchesFilters(r.companycode, r.developmentcode, r.modelcode, r.elevationcode)) return false;
       if (!isJobSpecFilter && activeReconStatus !== "ALL" && r.status !== activeReconStatus) return false;
       if (activeReconStage !== "ALL" && !r.wos.some(function (w) { return w.stagecode === activeReconStage; })) return false;
       var reviewedKey = isJobSpecFilter ? localState.jobSpecReviewed[r.key] : localState.reconReviewed[r.key];
       if (reviewedKey && !showReviewed) return false;
-      if (q && r.housenumber.indexOf(q) < 0 && (r.address || "").toUpperCase().indexOf(q) < 0) return false;
+      if (q) {
+        var haystack = [r.housenumber, r.address, r.catcc, r.desccat, r.desccost]
+          .filter(Boolean).join(" ").toUpperCase();
+        if (haystack.indexOf(q) < 0) return false;
+      }
       return true;
     });
     if (rows.length === 0) { document.getElementById("reconBody").innerHTML = "<p class='small-muted'>No lines match.</p>"; return; }
@@ -632,7 +639,7 @@
         renderRecon();
       });
     });
-    ["fCompany", "fDevelopment", "fModel"].forEach(function (id) {
+    ["fCompany", "fDevelopment", "fModel", "fElevation"].forEach(function (id) {
       document.getElementById(id).addEventListener("change", renderActiveView);
     });
     document.getElementById("showReviewed").addEventListener("change", renderRecon);

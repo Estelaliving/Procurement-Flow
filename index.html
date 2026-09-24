@@ -49,6 +49,9 @@
   <label>Model
     <select id="fModel"><option value="">All</option></select>
   </label>
+  <label>Elevation
+    <select id="fElevation"><option value="">All</option></select>
+  </label>
 </div>
 
 <main>
@@ -68,7 +71,7 @@
   <section id="viewRecon" class="view" style="display:none">
     <p class="view-hint">Every cost code with at least one released work order, checked line-by-line against budget. Rows tagged <b>Job-Specific</b> depend on lot size and site conditions — their OK/Caution/Flagged badge isn't meaningful; confirm those against the drawings using their separate checkbox instead. The <b>Job-Specific</b> filter shows all 14 of those codes for every house, including ones with no work order released yet.</p>
     <div id="reconJobSpecNote"></div>
-    <input id="reconHouseSearch" type="text" placeholder="Jump to one house — house number or address…">
+    <input id="reconHouseSearch" type="text" placeholder="Search house, address, or cost code/description (e.g. siding)…">
     <div class="stage-filter" id="reconStageFilter">
       <button class="stage-btn active" data-recon-stage="ALL" type="button">All Stages</button>
       <button class="stage-btn" data-recon-stage="F" type="button">F</button>
