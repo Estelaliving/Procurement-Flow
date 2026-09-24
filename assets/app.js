@@ -484,8 +484,13 @@
       var reviewedKey = isJobSpecFilter ? localState.jobSpecReviewed[r.key] : localState.reconReviewed[r.key];
       if (reviewedKey && !showReviewed) return false;
       if (q) {
-        var haystack = [r.housenumber, r.address, r.catcc, r.desccat, r.desccost]
-          .filter(Boolean).join(" ").toUpperCase();
+        // Search across every source this row draws from: the budget line's
+        // own category/description, and each individual WO's description +
+        // vendor (not just as a fallback when no budget line exists) -- a
+        // cost code can be found via either wording.
+        var haystackParts = [r.housenumber, r.address, r.catcc, r.desccat, r.desccost];
+        r.wos.forEach(function (w) { haystackParts.push(w.description, w.vendorname); });
+        var haystack = haystackParts.filter(Boolean).join(" ").toUpperCase();
         if (haystack.indexOf(q) < 0) return false;
       }
       return true;
