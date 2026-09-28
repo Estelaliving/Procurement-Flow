@@ -512,7 +512,12 @@
     var reviewBtn = '<button class="mark-btn" data-review-wos="' + h.housenumber + "|" + stage + '">Review released WOs</button>';
     if (st.state === "due") {
       badge = '<span class="badge badge-due">Due now</span>';
-      if (st.days != null) extra = '<span class="days-badge">' + (st.days >= 0 ? st.days + "d since submitted" : "") + "</span>";
+      // st.days means something different per stage: for F it's days since
+      // the permit was submitted to the city; for L/O it's days since the
+      // 7-day-lookahead threshold was crossed (there's no "submission" for
+      // those stages at all) -- so the label has to match the stage.
+      var daysLabel = stage === "F" ? "d since submitted" : "d since due";
+      if (st.days != null) extra = '<span class="days-badge">' + (st.days >= 0 ? st.days + daysLabel : "") + "</span>";
       extra += " " + reviewBtn + ' <button class="mark-btn" data-toggle-note="' + relKey + '">' +
         (note ? "Clear note" : "Note: I released this") + "</button>";
       if (note) extra += ' <span class="small-muted">noted ' + note.noted_at.slice(0, 10) +
