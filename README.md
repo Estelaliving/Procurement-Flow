@@ -72,6 +72,10 @@ you've checked against drawings — stored in one small Supabase table, `procure
   caught up to reality yet, this queue won't either, by design.
 - **Reconciliation tolerance**: ≤$200 diff = OK, $200–300 = Caution, >$300 = Flagged (applied to
   `|WO total − budget|` per cost code); more than one WO per house+cost-code = Duplicate.
+  Also Duplicate: a line with money already posted (`actual > 0`) and an open WO where
+  `actual + WO total` exceeds budget by more than $200. The work order feed only holds *open*
+  WOs (paid ones drop off and live only in `actual`), so that combination means the scope can be
+  paid twice; a legitimate progress-billing split sums to roughly the budget and isn't flagged.
 - Saw a `stagecode` value of `"I"` in the work orders data (outside F/L/O/Q) — displayed as-is,
   doesn't affect any logic, just flagging in case it's meaningful to you.
 - **Job-specific codes** (lot size / site condition dependent, reviewed by drawings rather than

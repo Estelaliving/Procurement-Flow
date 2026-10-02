@@ -89,7 +89,7 @@
   </section>
 
   <section id="viewRecon" class="view" style="display:none">
-    <p class="view-hint">Every cost code with at least one released work order, checked line-by-line against budget. Rows tagged <b>Job-Specific</b> depend on lot size and site conditions — their OK/Caution/Flagged badge isn't meaningful; confirm those against the drawings using their separate checkbox instead. The <b>Job-Specific</b> filter shows all 14 of those codes for every house, including ones with no work order released yet. Need to check a specific trade across a model/elevation regardless of whether it's been released — e.g. "does any BX2/A2 house have a siding line at all"? Combine the Model/Elevation filters with the <b>All cost codes (incl. no WO yet)</b> filter and search for the keyword.</p>
+    <p class="view-hint">Every cost code with at least one released work order, checked line-by-line against budget. A line is flagged <b>Duplicate</b> when it has more than one work order, <i>or</i> when money is already posted (actual) and an open work order still exists such that actual + WO exceeds the budget by more than $200 — the work order feed only holds open WOs, so that combination means the same scope can be paid twice. Rows tagged <b>Job-Specific</b> depend on lot size and site conditions — their OK/Caution/Flagged badge isn't meaningful; confirm those against the drawings using their separate checkbox instead. The <b>Job-Specific</b> filter shows all 14 of those codes for every house, including ones with no work order released yet. Need to check a specific trade across a model/elevation regardless of whether it's been released — e.g. "does any BX2/A2 house have a siding line at all"? Combine the Model/Elevation filters with the <b>All cost codes (incl. no WO yet)</b> filter and search for the keyword.</p>
     <div id="reconJobSpecNote"></div>
     <input id="reconHouseSearch" type="text" placeholder="Search house, address, or cost code/description (e.g. siding)…">
     <div class="stage-filter" id="reconStageFilter">
@@ -101,7 +101,7 @@
     </div>
     <div class="stage-filter" id="reconStatusFilter">
       <button class="stage-btn active" data-status="ALL" type="button">All</button>
-      <button class="stage-btn" data-status="DUPLICATE" type="button">Duplicate WO only</button>
+      <button class="stage-btn" data-status="DUPLICATE" type="button">Duplicates (multiple WOs, or WO + actual already posted)</button>
       <button class="stage-btn" data-status="FLAGGED" type="button">Flagged</button>
       <button class="stage-btn" data-status="CAUTION" type="button">Caution</button>
       <button class="stage-btn" data-status="OK" type="button">OK</button>

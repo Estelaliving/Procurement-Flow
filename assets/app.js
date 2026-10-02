@@ -228,14 +228,21 @@
       var woTotal = entry.wos.reduce(function (s, w) { return s + (num(w.amount) || 0); }, 0);
       var budgetAmt = entry.budget ? num(entry.budget.budgetamount) : null;
       var actualAmt = entry.budget ? num(entry.budget.actual) : null;
-      var diff = null, status;
+      var diff = null, status, overCommitted = false;
       if (entry.wos.length === 0) {
         status = "NO_WO";
       } else {
         diff = budgetAmt == null ? null : woTotal - budgetAmt;
         var absDiff = diff == null ? null : Math.abs(diff);
         var isDup = entry.wos.length > 1;
-        if (isDup) status = "DUPLICATE";
+        // The WO feed only holds open work orders -- once paid they drop off
+        // and live only in "actual". So a line with money already posted AND
+        // an open WO means the scope can be paid twice. A legit split
+        // (progress billing) sums to roughly the budget; anything beyond the
+        // tolerance over budget is a duplicate even with just one WO.
+        overCommitted = actualAmt != null && actualAmt > 0 &&
+          (actualAmt + woTotal) - (budgetAmt || 0) > CAUTION_THRESHOLD;
+        if (isDup || overCommitted) status = "DUPLICATE";
         else if (absDiff == null) status = "CAUTION";
         else if (absDiff > FLAG_THRESHOLD) status = "FLAGGED";
         else if (absDiff > CAUTION_THRESHOLD) status = "CAUTION";
@@ -254,6 +261,7 @@
         desccost: entry.budget ? entry.budget.desccost : (first ? first.description : ""),
         budgetAmt: budgetAmt, actualAmt: actualAmt, woTotal: woTotal,
         woCount: entry.wos.length, wos: entry.wos, diff: diff, status: status,
+        overCommitted: overCommitted,
         isJobSpecific: JOB_SPECIFIC_CODES.indexOf(entry.catcc) >= 0
       });
     });
@@ -656,7 +664,11 @@
       "<td>" + fmtMoney(r.woTotal) + "<div class='small-muted'>" + woList + "</div></td>" +
       "<td>" + r.woCount + "</td>" +
       "<td class='" + diffClass + "'>" + (r.diff == null ? "—" : fmtMoney(r.diff)) + "</td>" +
-      '<td><span class="badge ' + badgeClass + '">' + statusLabel + "</span></td>" +
+      '<td><span class="badge ' + badgeClass + '">' + statusLabel + "</span>" +
+        (r.overCommitted
+          ? "<div class='small-muted'>Actual " + fmtMoney(r.actualAmt) + " already posted + open WO " +
+            fmtMoney(r.woTotal) + " = " + fmtMoney(r.actualAmt + r.woTotal) + " vs budget " + fmtMoney(r.budgetAmt) + "</div>"
+          : "") + "</td>" +
       "<td>" + actions + "</td></tr>";
   }
 
