@@ -228,7 +228,7 @@
       var woTotal = entry.wos.reduce(function (s, w) { return s + (num(w.amount) || 0); }, 0);
       var budgetAmt = entry.budget ? num(entry.budget.budgetamount) : null;
       var actualAmt = entry.budget ? num(entry.budget.actual) : null;
-      var diff = null, status, overCommitted = false;
+      var diff = null, status, actualPlusWo = false;
       if (entry.wos.length === 0) {
         status = "NO_WO";
       } else {
@@ -236,13 +236,13 @@
         var absDiff = diff == null ? null : Math.abs(diff);
         var isDup = entry.wos.length > 1;
         // The WO feed only holds open work orders -- once paid they drop off
-        // and live only in "actual". So a line with money already posted AND
-        // an open WO means the scope can be paid twice. A legit split
-        // (progress billing) sums to roughly the budget; anything beyond the
-        // tolerance over budget is a duplicate even with just one WO.
-        overCommitted = actualAmt != null && actualAmt > 0 &&
-          (actualAmt + woTotal) - (budgetAmt || 0) > CAUTION_THRESHOLD;
-        if (isDup || overCommitted) status = "DUPLICATE";
+        // and live only in "actual". So money already posted AND an open WO
+        // on the same line means the scope could be paid twice. Always worth
+        // a human look, whatever the amounts (a legit progress-billing split
+        // is possible too, which is why this is a review flag, not a verdict).
+        actualPlusWo = actualAmt != null && actualAmt > 0;
+        if (isDup) status = "DUPLICATE";
+        else if (actualPlusWo) status = "ACTUAL_WO";
         else if (absDiff == null) status = "CAUTION";
         else if (absDiff > FLAG_THRESHOLD) status = "FLAGGED";
         else if (absDiff > CAUTION_THRESHOLD) status = "CAUTION";
@@ -261,7 +261,7 @@
         desccost: entry.budget ? entry.budget.desccost : (first ? first.description : ""),
         budgetAmt: budgetAmt, actualAmt: actualAmt, woTotal: woTotal,
         woCount: entry.wos.length, wos: entry.wos, diff: diff, status: status,
-        overCommitted: overCommitted,
+        actualPlusWo: actualPlusWo,
         isJobSpecific: JOB_SPECIFIC_CODES.indexOf(entry.catcc) >= 0
       });
     });
@@ -560,7 +560,11 @@
     var sourceRows = isJobSpecFilter ? jobSpecRows : (isAllCodesFilter ? allCostCodeRows : reconRows);
     var rows = sourceRows.filter(function (r) {
       if (!matchesFilters(r.companycode, r.developmentcode, r.modelcode, r.elevationcode)) return false;
-      if (!isJobSpecFilter && !isAllCodesFilter && activeReconStatus !== "ALL" && r.status !== activeReconStatus) return false;
+      if (!isJobSpecFilter && !isAllCodesFilter && activeReconStatus !== "ALL") {
+        // "Actual + Open WO" matches the flag itself, so a line that is also a
+        // multi-WO Duplicate (status DUPLICATE) still shows up under it.
+        if (activeReconStatus === "ACTUALWO" ? !r.actualPlusWo : r.status !== activeReconStatus) return false;
+      }
       if (activeReconStage !== "ALL" && !r.wos.some(function (w) { return w.stagecode === activeReconStage; })) return false;
       var reviewedKey = isJobSpecFilter ? localState.jobSpecReviewed[r.key] : localState.reconReviewed[r.key];
       if (reviewedKey && !showReviewed) return false;
@@ -587,15 +591,17 @@
 
     var html = houseKeys.map(function (hk) {
       var lines = byHouse[hk].sort(function (a, b) {
-        var order = { DUPLICATE: 0, FLAGGED: 1, CAUTION: 2, NO_WO: 3, OK: 4 };
+        var order = { DUPLICATE: 0, ACTUAL_WO: 1, FLAGGED: 2, CAUTION: 3, NO_WO: 4, OK: 5 };
         return (order[a.status] - order[b.status]) || a.catcc.localeCompare(b.catcc);
       });
       var dupCount = lines.filter(function (l) { return l.status === "DUPLICATE"; }).length;
+      var actualWoCount = lines.filter(function (l) { return l.actualPlusWo; }).length;
       var first = lines[0];
       var header = first.companycode + "/" + first.developmentcode + "/" + first.housenumber +
         (first.address ? " — " + first.address : "") +
         (first.modelcode ? " · " + first.modelcode + " " + (first.elevationcode || "") : "") +
-        (dupCount ? ' <span class="badge badge-dup">' + dupCount + " duplicate cost code(s)</span>" : "");
+        (dupCount ? ' <span class="badge badge-dup">' + dupCount + " duplicate cost code(s)</span>" : "") +
+        (actualWoCount ? ' <span class="badge badge-actualwo">' + actualWoCount + " actual + open WO</span>" : "");
       return '<div class="group-header">' + header + "</div>" +
         '<table><thead><tr><th>Cost Code</th><th>Description</th><th>Budget</th><th>Actual</th><th>WO Total</th><th>WO Count</th><th>Diff</th><th>Status</th><th></th></tr></thead><tbody>' +
         lines.map(renderReconRow).join("") + "</tbody></table>";
@@ -637,8 +643,8 @@
   }
 
   function renderReconRow(r) {
-    var badgeClass = { OK: "badge-ok", CAUTION: "badge-caution", FLAGGED: "badge-flag", DUPLICATE: "badge-dup", NO_WO: "badge-notyet" }[r.status];
-    var statusLabel = r.status === "NO_WO" ? "No WO yet" : r.status;
+    var badgeClass = { OK: "badge-ok", CAUTION: "badge-caution", FLAGGED: "badge-flag", DUPLICATE: "badge-dup", ACTUAL_WO: "badge-actualwo", NO_WO: "badge-notyet" }[r.status];
+    var statusLabel = r.status === "NO_WO" ? "No WO yet" : r.status === "ACTUAL_WO" ? "Actual + Open WO" : r.status;
     var diffClass = r.diff > 0 ? "diff-pos" : r.diff < 0 ? "diff-neg" : "";
     var reviewed = localState.reconReviewed[r.key];
     var jobSpecReviewed = localState.jobSpecReviewed[r.key];
@@ -665,9 +671,10 @@
       "<td>" + r.woCount + "</td>" +
       "<td class='" + diffClass + "'>" + (r.diff == null ? "—" : fmtMoney(r.diff)) + "</td>" +
       '<td><span class="badge ' + badgeClass + '">' + statusLabel + "</span>" +
-        (r.overCommitted
-          ? "<div class='small-muted'>Actual " + fmtMoney(r.actualAmt) + " already posted + open WO " +
-            fmtMoney(r.woTotal) + " = " + fmtMoney(r.actualAmt + r.woTotal) + " vs budget " + fmtMoney(r.budgetAmt) + "</div>"
+        (r.actualPlusWo
+          ? "<div class='small-muted'>" + (r.status === "DUPLICATE" ? "Also: actual" : "Actual") + " " + fmtMoney(r.actualAmt) +
+            " already posted + open WO " + fmtMoney(r.woTotal) + " = " + fmtMoney(r.actualAmt + r.woTotal) +
+            " vs budget " + fmtMoney(r.budgetAmt) + " — review</div>"
           : "") + "</td>" +
       "<td>" + actions + "</td></tr>";
   }

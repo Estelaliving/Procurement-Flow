@@ -64,6 +64,7 @@ tr:hover td{background:#1a2236}
 .badge-caution{background:var(--caution);color:#2a1e00}
 .badge-flag{background:var(--flag);color:#fff}
 .badge-dup{background:var(--dup);color:#fff}
+.badge-actualwo{background:#e07a2f;color:#2a1200}
 
 .group-header{background:var(--panel2);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--border);margin-top:14px;border-radius:6px}
 .house-card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px}
